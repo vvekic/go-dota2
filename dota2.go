@@ -5,20 +5,19 @@ import (
 	. "github.com/Philipp15b/go-steam/internal/gamecoordinator"
 	"github.com/rjacksonm1/go-dota2/internal/protobuf"
 	"log"
-	"time"
 )
 
-const VERSION = "0.0.1"
+const VERSION = "0.0.2"
 const AppId = 570
-
-var helloTicker *time.Ticker
 
 // To use any methods of this, you'll need to SetPlaying(true) and wait for
 // the GCReadyEvent.
 type Dota2 struct {
 	client  *steam.Client
-	gcReady bool
-	Debug   bool
+	gcReady bool // Used internally to prevent sending GC reqs when we don't have a GC connection
+	Debug   bool // Enabled additional logging
+
+	BasicGC *BasicGC
 }
 
 // Creates a new Dota2 instance and registers it as a packet handler
@@ -29,6 +28,10 @@ func New(client *steam.Client) *Dota2 {
 		Debug:   false,
 	}
 	client.GC.RegisterPacketHandler(d2)
+
+	d2.BasicGC = &BasicGC{d2: d2}
+	d2.client.GC.RegisterPacketHandler(d2.BasicGC)
+
 	return d2
 }
 
@@ -40,21 +43,8 @@ func (d2 *Dota2) SetPlaying(playing bool) {
 		}
 		d2.client.GC.SetGamesPlayed(AppId)
 
-		// Send ClientHello every 5 seconds.  This ticker will be stopped when we get ClientWelcome from the GC
-		helloTicker = time.NewTicker(5 * time.Second)
-		go func() {
-			for t := range helloTicker.C {
-
-				if d2.Debug {
-					log.Print("Sending ClientHello, ", t)
-				}
-
-				d2.client.GC.Write(NewGCMsgProtobuf(
-					AppId,
-					uint32(protobuf.EGCBaseClientMsg_k_EMsgGCClientHello),
-					&protobuf.CMsgClientHello{}))
-			}
-		}()
+		// Send hello to GC to initialize GC connection
+		d2.BasicGC.sendHello()
 	} else {
 		log.Print("Setting GamesPlayed to nil")
 		d2.client.GC.SetGamesPlayed()
@@ -71,27 +61,9 @@ func (d2 *Dota2) HandleGCPacket(packet *GCPacket) {
 		return
 	}
 	switch protobuf.EGCBaseClientMsg(packet.MsgType) {
-	case protobuf.EGCBaseClientMsg_k_EMsgGCClientWelcome:
-		if d2.Debug {
-			log.Print("Received ClientWelcome")
-		}
-		d2.handleWelcome(packet)
 
 	default:
 		log.Print("Recieved GC message without a handler, ",
 			packet.MsgType)
 	}
-}
-
-func (d2 *Dota2) handleWelcome(packet *GCPacket) {
-	// Stop sending "Hello"
-	if d2.Debug {
-		log.Print("Stopping ClientHello ticker")
-	}
-	helloTicker.Stop()
-
-	if d2.Debug {
-		log.Print("Emitting GCReadyEvent")
-	}
-	d2.client.Emit(&GCReadyEvent{})
 }
