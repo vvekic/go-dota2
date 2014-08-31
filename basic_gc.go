@@ -44,21 +44,3 @@ func (gc *BasicGC) handleWelcome(packet *GCPacket) {
 	gc.d2.gcReady = true
 	gc.d2.client.Emit(&GCReadyEvent{})
 }
-
-// ----------------------------------------------------------------------------
-
-// Handles all GC packets that come from Steam.
-// Ignores packets unrelated to Dota 2.
-// Routes certain packets to their handlers - if we have handlers defined for them
-func (gc *BasicGC) HandleGCPacket(packet *GCPacket) {
-	if packet.AppId != AppId {
-		return
-	}
-	switch protobuf.EGCBaseClientMsg(packet.MsgType) {
-	case protobuf.EGCBaseClientMsg_k_EMsgGCClientWelcome:
-		if gc.d2.Debug {
-			log.Print("Received ClientWelcome")
-		}
-		gc.handleWelcome(packet)
-	}
-}

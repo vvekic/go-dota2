@@ -13,11 +13,11 @@ const AppId = 570
 // To use any methods of this, you'll need to SetPlaying(true) and wait for
 // the GCReadyEvent.
 type Dota2 struct {
-	client  *steam.Client
-	gcReady bool // Used internally to prevent sending GC reqs when we don't have a GC connection
-	Debug   bool // Enabled additional logging
+	client  *steam.Client // Steam client, of course!
+	gcReady bool          // Used internally to prevent sending GC reqs when we don't have a GC connection
+	Debug   bool          // Enabled additional logging
 
-	BasicGC *BasicGC
+	BasicGC *BasicGC // Contains basic GC methods required to work with the GC
 }
 
 // Creates a new Dota2 instance and registers it as a packet handler
@@ -30,7 +30,6 @@ func New(client *steam.Client) *Dota2 {
 	client.GC.RegisterPacketHandler(d2)
 
 	d2.BasicGC = &BasicGC{d2: d2}
-	d2.client.GC.RegisterPacketHandler(d2.BasicGC)
 
 	return d2
 }
@@ -53,14 +52,19 @@ func (d2 *Dota2) SetPlaying(playing bool) {
 
 type GCReadyEvent struct{}
 
-// Handles all GC packets that come from Steam.
-// Ignores packets unrelated to Dota 2.
-// Routes certain packets to their handlers - if we have handlers defined for them
+// Handles all GC packets that come from Steam and routes them to their relevant handlers.
 func (d2 *Dota2) HandleGCPacket(packet *GCPacket) {
 	if packet.AppId != AppId {
 		return
 	}
-	switch protobuf.EGCBaseClientMsg(packet.MsgType) {
+
+	// ALl key types are derived from int32, so cast to int32 to allow us to use a single switch for all types.
+	switch int32(packet.MsgType) {
+	case int32(protobuf.EGCBaseClientMsg_k_EMsgGCClientWelcome):
+		if d2.Debug {
+			log.Print("Received ClientWelcome")
+		}
+		d2.BasicGC.handleWelcome(packet)
 
 	default:
 		log.Print("Recieved GC message without a handler, ",
