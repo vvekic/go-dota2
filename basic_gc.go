@@ -9,10 +9,12 @@ import (
 
 var helloTicker *time.Ticker
 
+// Namespace for very basic GC calls, e.g. initializing a Dota 2 GC connection
 type BasicGC struct {
 	d2 *Dota2
 }
 
+// Continually send "Hello" to the Dota 2 GC to initialize a connection.  Will send hello every 5 seconds until the GC responds with "Welcome"
 func (gc *BasicGC) sendHello() {
 	// Send ClientHello every 5 seconds.  This ticker will be stopped when we get ClientWelcome from the GC
 	helloTicker = time.NewTicker(5 * time.Second)
@@ -31,6 +33,7 @@ func (gc *BasicGC) sendHello() {
 	}()
 }
 
+// Handle the GC's "Welcome" message; stops the "Hello" ticker and emits GCReadyEvent.
 func (gc *BasicGC) handleWelcome(packet *GCPacket) {
 	// Stop sending "Hello"
 	if gc.d2.Debug {

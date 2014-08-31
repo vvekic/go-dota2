@@ -18,6 +18,7 @@ type Dota2 struct {
 	Debug   bool          // Enabled additional logging
 
 	BasicGC *BasicGC // Contains basic GC methods required to work with the GC
+	Match   *Match   // Contains match-related GC methods.
 }
 
 // Creates a new Dota2 instance and registers it as a packet handler
@@ -30,6 +31,7 @@ func New(client *steam.Client) *Dota2 {
 	client.GC.RegisterPacketHandler(d2)
 
 	d2.BasicGC = &BasicGC{d2: d2}
+	d2.Match = &Match{d2: d2}
 
 	return d2
 }
@@ -58,13 +60,20 @@ func (d2 *Dota2) HandleGCPacket(packet *GCPacket) {
 		return
 	}
 
-	// ALl key types are derived from int32, so cast to int32 to allow us to use a single switch for all types.
+	// All key types are derived from int32, so cast to int32 to allow us to use a single switch for all types.
 	switch int32(packet.MsgType) {
 	case int32(protobuf.EGCBaseClientMsg_k_EMsgGCClientWelcome):
 		if d2.Debug {
 			log.Print("Received ClientWelcome")
 		}
 		d2.BasicGC.handleWelcome(packet)
+
+	case int32(protobuf.EDOTAGCMsg_k_EMsgGCMatchDetailsResponse):
+		if d2.Debug {
+			log.Print("Received match details response")
+		}
+
+		d2.Match.handleDetailsResponse(packet)
 
 	default:
 		log.Print("Recieved GC message without a handler, ",
