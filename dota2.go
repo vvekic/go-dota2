@@ -7,7 +7,7 @@ import (
 	"log"
 )
 
-const VERSION = "0.0.2"
+const VERSION = "0.0.3"
 const AppId = 570
 
 // To use any methods of this, you'll need to SetPlaying(true) and wait for
