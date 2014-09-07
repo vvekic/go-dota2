@@ -2,12 +2,13 @@ package dota2
 
 import (
 	"github.com/Philipp15b/go-steam"
+	. "github.com/Philipp15b/go-steam/internal"
 	. "github.com/Philipp15b/go-steam/internal/gamecoordinator"
 	"github.com/rjacksonm1/go-dota2/internal/protobuf"
 	"log"
 )
 
-const VERSION = "0.0.3"
+const VERSION = "0.0.4"
 const AppId = 570
 
 // To use any methods of this, you'll need to SetPlaying(true) and wait for
@@ -17,6 +18,9 @@ type Dota2 struct {
 	gcReady bool          // Used internally to prevent sending GC reqs when we don't have a GC connection
 	Debug   bool          // Enabled additional logging
 
+	jobs      map[JobId]chan *GCPacket // Set of channels.  Used to sync up go-steam's event-based GC calls.
+	lastJobID JobId                    // Last job ID. We will increment this for each job we create
+
 	BasicGC *BasicGC // Contains basic GC methods required to work with the GC
 	Match   *Match   // Contains match-related GC methods.
 }
@@ -24,9 +28,11 @@ type Dota2 struct {
 // Creates a new Dota2 instance and registers it as a packet handler
 func New(client *steam.Client) *Dota2 {
 	d2 := &Dota2{
-		client:  client,
-		gcReady: false,
-		Debug:   false,
+		client:    client,
+		gcReady:   false,
+		Debug:     false,
+		lastJobID: 0,
+		jobs:      make(map[JobId]chan *GCPacket),
 	}
 	client.GC.RegisterPacketHandler(d2)
 
@@ -60,23 +66,22 @@ func (d2 *Dota2) HandleGCPacket(packet *GCPacket) {
 		return
 	}
 
-	// All key types are derived from int32, so cast to int32 to allow us to use a single switch for all types.
-	switch int32(packet.MsgType) {
-	case int32(protobuf.EGCBaseClientMsg_k_EMsgGCClientWelcome):
-		if d2.Debug {
-			log.Print("Received ClientWelcome")
+	// If we have a handler channel for this, pipe the GC packet straight there,
+	// otherwise use our own routing.
+	if handlerChan, ok := d2.jobs[packet.TargetJobId]; ok {
+		handlerChan <- packet
+	} else {
+		// All key types are derived from int32, so cast to int32 to allow us to use a single switch for all types.
+		switch int32(packet.MsgType) {
+		case int32(protobuf.EGCBaseClientMsg_k_EMsgGCClientWelcome):
+			if d2.Debug {
+				log.Print("Received ClientWelcome")
+			}
+			d2.BasicGC.handleWelcome(packet)
+
+		default:
+			log.Print("Recieved GC message without a handler, ",
+				packet.MsgType)
 		}
-		d2.BasicGC.handleWelcome(packet)
-
-	case int32(protobuf.EDOTAGCMsg_k_EMsgGCMatchDetailsResponse):
-		if d2.Debug {
-			log.Print("Received match details response")
-		}
-
-		d2.Match.handleDetailsResponse(packet)
-
-	default:
-		log.Print("Recieved GC message without a handler, ",
-			packet.MsgType)
 	}
 }

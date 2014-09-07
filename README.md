@@ -24,11 +24,10 @@ Steam account credentials in this example are set via environmental variables, s
 
 ```go
 
-
-
 package main
 
 import (
+	"encoding/base64"
 	"github.com/Philipp15b/go-steam"
 	"github.com/Philipp15b/go-steam/internal/steamlang"
 	"github.com/rjacksonm1/go-dota2"
@@ -58,12 +57,9 @@ func onSteamLogon() {
 func onDotaGCReady() {
 	log.Print("Doto GC ready!")
 
-	dotaClient.Match.RequestDetails(MATCHID)
-}
+	matchDeets := dotaClient.Match.RequestDetails(MATCHID)
 
-func onMatchDetailsResponse(event *dota2.MatchDetailsResponseEvent) {
-	// TODO
-	log.Print(event)
+	log.Printf("Got match details for match id %d", matchDeets.GetMatch().GetMatchId())
 }
 
 func main() {
@@ -74,7 +70,10 @@ func main() {
 	steamCredentials.Password = os.Getenv("STEAM_PASSWORD")
 
 	if os.Getenv("STEAM_SENTRY") != "" {
-		steamCredentials.SentryFileHash = []byte(os.Getenv("STEAM_SENTRY"))
+		decoded_sentry, err := base64.StdEncoding.DecodeString(os.Getenv("STEAM_SENTRY"))
+		if err == nil {
+			steamCredentials.SentryFileHash = decoded_sentry
+		}
 	}
 	if os.Getenv("STEAM_AUTH_CODE") != "" {
 		steamCredentials.AuthCode = os.Getenv("STEAM_AUTH_CODE")
@@ -97,8 +96,7 @@ func main() {
 			steamClient.Auth.LogOn(steamCredentials)
 
 		case *steam.MachineAuthUpdateEvent:
-			log.Printf("Received new sentry; logging it:", string(e.Hash))
-			// TODO: This should be stored in a database somewhere
+			log.Printf("Received new sentry; logging it: \"%s\"", base64.StdEncoding.EncodeToString(e.Hash))
 
 		case *steam.LoggedOnEvent:
 			log.Print("Logged on to Steam")
@@ -109,10 +107,6 @@ func main() {
 			log.Print("Received Dota 2 GC Ready event")
 			onDotaGCReady()
 
-		case *dota2.MatchDetailsResponseEvent:
-			log.Print("Received Dota 2 Match Details Response event")
-			onMatchDetailsResponse(e)
-
 		// Errors
 		case steam.FatalErrorEvent:
 		case error:
@@ -121,5 +115,6 @@ func main() {
 	}
 
 }
+
 
 ```
