@@ -7,11 +7,11 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Philipp15b/go-steam"
-	"github.com/Philipp15b/go-steam/dota/protocol/protobuf"
-	"github.com/Philipp15b/go-steam/protocol"
-	"github.com/Philipp15b/go-steam/protocol/gamecoordinator"
-	"github.com/Philipp15b/go-steam/protocol/steamlang"
+	"github.com/vvekic/go-steam"
+	"github.com/vvekic/go-steam/dota/protocol/protobuf"
+	"github.com/vvekic/go-steam/protocol"
+	"github.com/vvekic/go-steam/protocol/gamecoordinator"
+	"github.com/vvekic/go-steam/protocol/steamlang"
 )
 
 const AppId = 570

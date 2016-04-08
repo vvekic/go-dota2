@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"log"
 
-	"github.com/Philipp15b/go-steam/dota/protocol/protobuf"
-	"github.com/Philipp15b/go-steam/protocol/gamecoordinator"
+	"github.com/vvekic/go-steam/dota/protocol/protobuf"
+	"github.com/vvekic/go-steam/protocol/gamecoordinator"
 )
 
 // Sends a request to the Dota 2 GC requesting details for the given matchid.
