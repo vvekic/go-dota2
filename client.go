@@ -95,7 +95,7 @@ func (c *Client) sendHello() {
 			log.Printf("Sending ClientHello")
 			c.sc.GC.Write(gamecoordinator.NewGCMsgProtobuf(
 				AppId,
-				protobuf.EGCBaseClientMsg_k_EMsgGCClientHello,
+				uint32(protobuf.EGCBaseClientMsg_k_EMsgGCClientHello),
 				&protobuf.CMsgClientHello{
 					// set engine to Source 2
 					Engine: protobuf.ESourceEngine_k_ESE_Source2.Enum(),
