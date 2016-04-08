@@ -1,10 +1,11 @@
 package dota2
 
 import (
-	. "github.com/Philipp15b/go-steam/internal/gamecoordinator"
-	"github.com/rjacksonm1/go-dota2/internal/protobuf"
 	"log"
 	"time"
+
+	"github.com/Philipp15b/go-steam/dota/protocol/protobuf"
+	"github.com/Philipp15b/go-steam/protocol/gamecoordinator"
 )
 
 var helloTicker *time.Ticker
@@ -25,7 +26,7 @@ func (gc *BasicGC) sendHello() {
 				log.Print("Sending ClientHello, ", t)
 			}
 
-			gc.d2.client.GC.Write(NewGCMsgProtobuf(
+			gc.d2.client.GC.Write(gamecoordinator.NewGCMsgProtobuf(
 				AppId,
 				uint32(protobuf.EGCBaseClientMsg_k_EMsgGCClientHello),
 				&protobuf.CMsgClientHello{}))
@@ -34,7 +35,7 @@ func (gc *BasicGC) sendHello() {
 }
 
 // Handle the GC's "Welcome" message; stops the "Hello" ticker and emits GCReadyEvent.
-func (gc *BasicGC) handleWelcome(packet *GCPacket) {
+func (gc *BasicGC) handleWelcome(packet *gamecoordinator.GCPacket) {
 	// Stop sending "Hello"
 	if gc.d2.Debug {
 		log.Print("Stopping ClientHello ticker")

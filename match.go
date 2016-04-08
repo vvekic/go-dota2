@@ -1,10 +1,11 @@
 package dota2
 
 import (
-	. "github.com/Philipp15b/go-steam/internal"
-	. "github.com/Philipp15b/go-steam/internal/gamecoordinator"
-	"github.com/rjacksonm1/go-dota2/internal/protobuf"
 	"log"
+
+	"github.com/Philipp15b/go-steam/dota/protocol/protobuf"
+	"github.com/Philipp15b/go-steam/protocol"
+	"github.com/Philipp15b/go-steam/protocol/gamecoordinator"
 )
 
 // Serves as a namespace for match-related methods.
@@ -13,9 +14,9 @@ type Match struct {
 }
 
 // Sends a request to the Dota 2 GC requesting details for the given matchid.
-func (match *Match) RequestDetails(matchid uint32) *protobuf.CMsgGCMatchDetailsResponse {
+func (match *Match) RequestDetails(matchid uint64) *protobuf.CMsgGCMatchDetailsResponse {
 	if !match.d2.gcReady {
-		log.Printf("Cannot request match details for %s.  GC not ready", matchid)
+		log.Printf("Cannot request match details for %d.  GC not ready", matchid)
 		panic("GC not ready")
 	}
 
@@ -23,7 +24,7 @@ func (match *Match) RequestDetails(matchid uint32) *protobuf.CMsgGCMatchDetailsR
 		log.Printf("Requesting match details for matchid %d\n", matchid)
 	}
 
-	msgToGC := NewGCMsgProtobuf(
+	msgToGC := gamecoordinator.NewGCMsgProtobuf(
 		AppId,
 		uint32(protobuf.EDOTAGCMsg_k_EMsgGCMatchDetailsRequest),
 		&protobuf.CMsgGCMatchDetailsRequest{
@@ -31,12 +32,12 @@ func (match *Match) RequestDetails(matchid uint32) *protobuf.CMsgGCMatchDetailsR
 		})
 
 	// Create job ID for this request (TODO: Make a wrapper than does this for us?)
-	jobId := JobId(match.d2.lastJobID + 1)
+	jobId := protocol.JobId(match.d2.lastJobID + 1)
 	match.d2.lastJobID = jobId
 	msgToGC.SetSourceJobId(jobId)
 
 	// Create a channel for this job
-	match.d2.jobs[jobId] = make(chan *GCPacket)
+	match.d2.jobs[jobId] = make(chan *gamecoordinator.GCPacket)
 
 	// Write this request to the GC
 	match.d2.client.GC.Write(msgToGC)

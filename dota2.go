@@ -1,11 +1,12 @@
 package dota2
 
 import (
-	"github.com/Philipp15b/go-steam"
-	. "github.com/Philipp15b/go-steam/internal"
-	. "github.com/Philipp15b/go-steam/internal/gamecoordinator"
-	"github.com/rjacksonm1/go-dota2/internal/protobuf"
 	"log"
+
+	"github.com/Philipp15b/go-steam"
+	"github.com/Philipp15b/go-steam/dota/protocol/protobuf"
+	"github.com/Philipp15b/go-steam/protocol"
+	"github.com/Philipp15b/go-steam/protocol/gamecoordinator"
 )
 
 const VERSION = "0.0.4"
@@ -18,8 +19,8 @@ type Dota2 struct {
 	gcReady bool          // Used internally to prevent sending GC reqs when we don't have a GC connection
 	Debug   bool          // Enabled additional logging
 
-	jobs      map[JobId]chan *GCPacket // Set of channels.  Used to sync up go-steam's event-based GC calls.
-	lastJobID JobId                    // Last job ID. We will increment this for each job we create
+	jobs      map[protocol.JobId]chan *gamecoordinator.GCPacket // Set of channels.  Used to sync up go-steam's event-based GC calls.
+	lastJobID protocol.JobId                                    // Last job ID. We will increment this for each job we create
 
 	BasicGC *BasicGC // Contains basic GC methods required to work with the GC
 	Match   *Match   // Contains match-related GC methods.
@@ -32,7 +33,7 @@ func New(client *steam.Client) *Dota2 {
 		gcReady:   false,
 		Debug:     false,
 		lastJobID: 0,
-		jobs:      make(map[JobId]chan *GCPacket),
+		jobs:      make(map[protocol.JobId]chan *gamecoordinator.GCPacket),
 	}
 	client.GC.RegisterPacketHandler(d2)
 
@@ -61,7 +62,7 @@ func (d2 *Dota2) SetPlaying(playing bool) {
 type GCReadyEvent struct{}
 
 // Handles all GC packets that come from Steam and routes them to their relevant handlers.
-func (d2 *Dota2) HandleGCPacket(packet *GCPacket) {
+func (d2 *Dota2) HandleGCPacket(packet *gamecoordinator.GCPacket) {
 	if packet.AppId != AppId {
 		return
 	}
