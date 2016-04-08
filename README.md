@@ -6,7 +6,7 @@ A Dota 2 client for Go.
 Currently implemented:
 
   * MatchDetails
-	* ProfileCard
+  * ProfileCard
 
 ## Example
 This code snippet is connecting to Steam, and then connecting to the Dota 2 GC, requesting match details for a sample match and printing the name of the player in slot #1.
