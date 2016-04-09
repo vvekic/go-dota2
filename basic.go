@@ -12,33 +12,62 @@ import (
 
 var (
 	helloTicker *time.Ticker
-	jobTimeout  time.Duration = time.Second * 10
+	jobTimeout  time.Duration = time.Second * 6
+	jobRetries                = 10
 )
 
-func (c *Client) runJob(msgToGC *gamecoordinator.GCMsgProtobuf) (*gamecoordinator.GCPacket, error) {
+type timeoutError struct {
+	err error
+}
+
+func (t timeoutError) Error() string {
+	return t.err.Error()
+}
+
+func (c *Client) runJob(msg *gamecoordinator.GCMsgProtobuf) (*gamecoordinator.GCPacket, error) {
+	for i := 0; i < jobRetries; i++ {
+		packet, err := c.runJobOne(msg)
+		if err != nil {
+			if te, ok := err.(timeoutError); ok {
+				log.Printf("error: %v, retry #%d", te, i+1)
+				continue
+			}
+			return nil, err
+		}
+		return packet, nil
+	}
+	return nil, fmt.Errorf("job failed after %d retries", jobRetries)
+}
+
+func (c *Client) runJobOne(msg *gamecoordinator.GCMsgProtobuf) (*gamecoordinator.GCPacket, error) {
+	// Create a channel for this job
+	jobChan := make(chan *gamecoordinator.GCPacket)
+
+	// Create job ID for this request
+	c.jobsLock.Lock()
 	// Create job ID for this request
 	jobId := protocol.JobId(c.lastJobID + 1)
 	c.lastJobID = jobId
-	msgToGC.SetSourceJobId(jobId)
-
-	// Create a channel for this job
-	c.jobsLock.Lock()
-	jobChan := make(chan *gamecoordinator.GCPacket)
 	c.jobs[jobId] = jobChan
 	c.jobsLock.Unlock()
 
+	msg.SetSourceJobId(jobId)
+
 	// Write this request to the GC
-	c.sc.GC.Write(msgToGC)
+	c.sc.GC.Write(msg)
 
 	select {
 	case packet := <-jobChan: // GCPacket response from GC
+		c.jobsLock.Lock()
+		delete(c.jobs, jobId)
+		c.jobsLock.Unlock()
 		return packet, nil
 	case <-time.After(jobTimeout):
 		c.jobsLock.Lock()
 		delete(c.jobs, jobId)
 		close(jobChan)
 		c.jobsLock.Unlock()
-		return nil, fmt.Errorf("job %d timeout", jobId)
+		return nil, timeoutError{fmt.Errorf("job %d timeout", jobId)}
 	}
 }
 
