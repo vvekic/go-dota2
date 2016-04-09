@@ -135,6 +135,10 @@ func (c *Client) Connect(username, password, sentry, authCode string) error {
 	}
 }
 
+func (c *Client) Disconnect() {
+	c.sc.Disconnect()
+}
+
 func (c *Client) loop() {
 	for event := range c.sc.Events() {
 		switch e := event.(type) {
@@ -149,6 +153,8 @@ func (c *Client) loop() {
 			c.onSteamLogon()
 		case *steam.LogOnFailedEvent:
 			log.Printf("Log on failed, result: %s", e.Result)
+		case *steam.LoggedOffEvent:
+			log.Printf("Logged off, result: %s", e.Result)
 		case *steam.DisconnectedEvent:
 			log.Printf("Disconnected from Steam.")
 		case *steam.AccountInfoEvent:
