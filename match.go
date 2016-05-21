@@ -31,3 +31,27 @@ func (c *Client) MatchDetails(matchID uint64) (*protobuf.CMsgGCMatchDetailsRespo
 	packet.ReadProtoMsg(response) // Interpret GCPacket and populate `response` with data
 	return response, nil
 }
+
+func (c *Client) Matches(startMatchID uint64, matchesRequested uint32) (*protobuf.CMsgDOTARequestMatchesResponse, error) {
+	if !c.gcReady {
+		return nil, fmt.Errorf("GC not ready")
+	}
+
+	log.Printf("Requesting matches starting at match ID: %d", startMatchID)
+
+	msgToGC := gamecoordinator.NewGCMsgProtobuf(
+		AppId,
+		uint32(protobuf.EDOTAGCMsg_k_EMsgGCRequestMatches),
+		&protobuf.CMsgDOTARequestMatches{
+			StartAtMatchId:   &startMatchID,
+			MatchesRequested: &matchesRequested,
+		})
+
+	response := new(protobuf.CMsgDOTARequestMatchesResponse)
+	packet, err := c.runJob(msgToGC)
+	if err != nil {
+		return nil, err
+	}
+	packet.ReadProtoMsg(response) // Interpret GCPacket and populate `response` with data
+	return response, nil
+}
