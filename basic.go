@@ -5,6 +5,7 @@ import (
 	"log"
 	"time"
 
+	"github.com/cenk/backoff"
 	"github.com/vvekic/go-steam/dota/protocol/protobuf"
 	"github.com/vvekic/go-steam/protocol"
 	"github.com/vvekic/go-steam/protocol/gamecoordinator"
@@ -25,18 +26,24 @@ func (t timeoutError) Error() string {
 }
 
 func (c *Client) runJob(msg *gamecoordinator.GCMsgProtobuf) (*gamecoordinator.GCPacket, error) {
-	for i := 0; i < jobRetries; i++ {
-		packet, err := c.runJobOne(msg)
+
+	var packet *gamecoordinator.GCPacket
+
+	operation := func() error {
+		p, err := c.runJobOne(msg)
 		if err != nil {
-			if te, ok := err.(timeoutError); ok {
-				log.Printf("error: %v, retry #%d", te, i+1)
-				continue
-			}
-			return nil, err
+			log.Printf("error: %v, backing off", err)
+			return err
 		}
-		return packet, nil
+		packet = p
+		return nil
 	}
-	return nil, fmt.Errorf("job failed after %d retries", jobRetries)
+
+	if err := backoff.Retry(operation, backoff.NewExponentialBackOff()); err != nil {
+		return nil, fmt.Errorf("error: %v, stopping back-off", err)
+	}
+
+	return packet, nil
 }
 
 func (c *Client) runJobOne(msg *gamecoordinator.GCMsgProtobuf) (*gamecoordinator.GCPacket, error) {
