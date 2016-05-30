@@ -66,6 +66,8 @@ func (c *Client) HandleGCPacket(packet *gamecoordinator.GCPacket) {
 			c.handleWelcome(packet)
 		case int32(protobuf.EGCBaseClientMsg_k_EMsgGCClientConnectionStatus):
 			c.handleConnectionStatus(packet)
+		case int32(protobuf.EDOTAGCMsg_k_EMsgDOTAGetEventPointsResponse):
+			c.handleGetEventPointsResponse(packet)
 		case int32(protobuf.ESOMsg_k_ESOMsg_CacheSubscribed):
 			c.handleCacheSubscribed(packet)
 		default:

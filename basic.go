@@ -13,7 +13,7 @@ import (
 
 var (
 	helloTicker *time.Ticker
-	jobTimeout  time.Duration = time.Second * 6
+	jobTimeout  time.Duration = time.Second * 30
 	jobRetries                = 10
 )
 
@@ -98,4 +98,10 @@ func (c *Client) handleCacheSubscribed(packet *gamecoordinator.GCPacket) {
 	response := new(protobuf.CMsgSOCacheSubscribed)
 	packet.ReadProtoMsg(response) // Interpret GCPacket and populate `response` with data
 	log.Printf("Received CacheSubscribed version %v", response.GetVersion())
+}
+
+func (c *Client) handleGetEventPointsResponse(packet *gamecoordinator.GCPacket) {
+	response := new(protobuf.CMsgDOTAGetEventPointsResponse)
+	packet.ReadProtoMsg(response)
+	log.Printf("Received GetEventPointsResponse %s", response.String())
 }
