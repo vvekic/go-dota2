@@ -32,22 +32,52 @@ func (c *Client) MatchDetails(matchID uint64) (*protobuf.CMsgGCMatchDetailsRespo
 	return response, nil
 }
 
-func (c *Client) Matches(startMatchID uint64, matchesRequested uint32) (*protobuf.CMsgDOTARequestMatchesResponse, error) {
+func (c *Client) Matches(startMatchID int, matchesRequested uint32) (*protobuf.CMsgDOTARequestMatchesResponse, error) {
 	if !c.gcReady {
 		return nil, fmt.Errorf("GC not ready")
 	}
 
 	log.Printf("Requesting matches starting at match ID: %d", startMatchID)
 
+	req := &protobuf.CMsgDOTARequestMatches{
+		MatchesRequested: &matchesRequested,
+	}
+	if startMatchID >= 0 {
+		var id uint64
+		id = uint64(startMatchID)
+		req.StartAtMatchId = &id
+	}
+
 	msgToGC := gamecoordinator.NewGCMsgProtobuf(
 		AppId,
 		uint32(protobuf.EDOTAGCMsg_k_EMsgGCRequestMatches),
-		&protobuf.CMsgDOTARequestMatches{
-			StartAtMatchId:   &startMatchID,
-			MatchesRequested: &matchesRequested,
-		})
+		req,
+	)
 
 	response := new(protobuf.CMsgDOTARequestMatchesResponse)
+	packet, err := c.runJob(msgToGC)
+	if err != nil {
+		return nil, err
+	}
+	packet.ReadProtoMsg(response) // Interpret GCPacket and populate `response` with data
+	return response, nil
+}
+
+func (c *Client) MatchMinimalDetails(matchIDs ...uint64) (*protobuf.CMsgClientToGCMatchesMinimalResponse, error) {
+	if !c.gcReady {
+		return nil, fmt.Errorf("GC not ready")
+	}
+
+	log.Printf("Requesting minimal match details for match IDs: %v", matchIDs)
+
+	msgToGC := gamecoordinator.NewGCMsgProtobuf(
+		AppId,
+		uint32(protobuf.EDOTAGCMsg_k_EMsgClientToGCMatchesMinimalRequest),
+		&protobuf.CMsgClientToGCMatchesMinimalRequest{
+			MatchIds: matchIDs,
+		})
+
+	response := new(protobuf.CMsgClientToGCMatchesMinimalResponse)
 	packet, err := c.runJob(msgToGC)
 	if err != nil {
 		return nil, err

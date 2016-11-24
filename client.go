@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/pkg/errors"
 	"github.com/vvekic/go-steam"
 	"github.com/vvekic/go-steam/dota/protocol/protobuf"
 	"github.com/vvekic/go-steam/protocol"
@@ -18,14 +19,25 @@ const AppId = 570
 
 var readyTimeout time.Duration = time.Second * 30
 
+func init() {
+	if err := steam.InitializeSteamDirectory(); err != nil {
+		log.Printf("error initializing Steam Directory, using built-in server list")
+	}
+}
+
 // To use any methods of this, you'll need to SetPlaying(true) and wait for
 // the GCReadyEvent.
 type Client struct {
-	sc        *steam.Client // Steam client, of course!
-	readyLock sync.Mutex
-	readyChan chan struct{}
-	gcReady   bool // Used internally to prevent sending GC reqs when we don't have a GC connection
-	creds     *steam.LogOnDetails
+	Id          int
+	helloTicker *time.Ticker
+	sc          *steam.Client // Steam client, of course!
+	readyLock   sync.Mutex
+	readyChan   chan struct{}
+	quitChan    chan struct{}
+	gcReady     bool // Used internally to prevent sending GC reqs when we don't have a GC connection
+	Creds       *steam.LogOnDetails
+	connected   bool
+	Timeouts    int
 
 	jobs      map[protocol.JobId]chan *gamecoordinator.GCPacket // Set of channels.  Used to sync up go-steam's event-based GC calls.
 	lastJobID protocol.JobId                                    // Last job ID. We will increment this for each job we create
@@ -37,8 +49,10 @@ func NewClient() *Client {
 	c := &Client{
 		sc:        steam.NewClient(),
 		readyChan: make(chan struct{}),
+		quitChan:  make(chan struct{}),
 		gcReady:   false,
 		jobs:      make(map[protocol.JobId]chan *gamecoordinator.GCPacket),
+		connected: false,
 	}
 	c.sc.GC.RegisterPacketHandler(c)
 	go c.loop()
@@ -62,7 +76,7 @@ func (c *Client) HandleGCPacket(packet *gamecoordinator.GCPacket) {
 		// All key types are derived from int32, so cast to int32 to allow us to use a single switch for all types.
 		switch int32(packet.MsgType) {
 		case int32(protobuf.EGCBaseClientMsg_k_EMsgGCClientWelcome):
-			log.Printf("Received ClientWelcome")
+			log.Printf("Client %d Received ClientWelcome", c.Id)
 			c.handleWelcome(packet)
 		case int32(protobuf.EGCBaseClientMsg_k_EMsgGCClientConnectionStatus):
 			c.handleConnectionStatus(packet)
@@ -91,10 +105,10 @@ func (c *Client) setPlaying(playing bool) {
 // Continually send "Hello" to the Dota 2 GC to initialize a connection.  Will send hello every 5 seconds until the GC responds with "Welcome"
 func (c *Client) sendHello() {
 	// Send ClientHello every 5 seconds.  This ticker will be stopped when we get ClientWelcome from the GC
-	helloTicker = time.NewTicker(5 * time.Second)
+	c.helloTicker = time.NewTicker(5 * time.Second)
 	go func() {
-		for range helloTicker.C {
-			log.Printf("Sending ClientHello")
+		for range c.helloTicker.C {
+			log.Printf("Client %d Sending ClientHello", c.Id)
 			c.sc.GC.Write(gamecoordinator.NewGCMsgProtobuf(
 				AppId,
 				uint32(protobuf.EGCBaseClientMsg_k_EMsgGCClientHello),
@@ -106,9 +120,30 @@ func (c *Client) sendHello() {
 	}()
 }
 
+func (c *Client) ConnectWithCreds(creds *steam.LogOnDetails) error {
+	if err := c.sc.ConnectTo(steam.GetRandomEuropeCM()); err != nil {
+		return errors.Wrap(err, "error connecting to Steam server")
+	}
+
+	select {
+	case <-c.readyChan:
+		c.connected = true
+		go func() {
+			<-c.sc.Disconnected
+			c.connected = false
+		}()
+		return nil
+	case <-time.After(readyTimeout):
+		return fmt.Errorf("timeout waiting for GC to become ready")
+	case <-c.quitChan:
+		return fmt.Errorf("client disconnected")
+	}
+}
+
 func (c *Client) Connect(username, password, sentry, authCode string) error {
+	log.Printf("client %d connecting(%s, %s, %s, %s)", c.Id, username, password, sentry, authCode)
 	// Check for credentials
-	c.creds = &steam.LogOnDetails{
+	c.Creds = &steam.LogOnDetails{
 		Username: username,
 		Password: password,
 		AuthCode: authCode,
@@ -118,23 +153,17 @@ func (c *Client) Connect(username, password, sentry, authCode string) error {
 		if err != nil {
 			log.Printf("error decoding sentry")
 		} else {
-			c.creds.SentryFileHash = decodedSentry
+			c.Creds.SentryFileHash = decodedSentry
 		}
 	}
-	if c.creds.Username == "" {
+	if c.Creds.Username == "" {
 		return fmt.Errorf("username not set")
 	}
-	if c.creds.Password == "" {
+	if c.Creds.Password == "" {
 		return fmt.Errorf("password not set")
 	}
-	c.sc.Connect()
 
-	select {
-	case <-c.readyChan:
-		return nil
-	case <-time.After(readyTimeout):
-		return fmt.Errorf("timeout waiting for GC to become ready")
-	}
+	return c.ConnectWithCreds(c.Creds)
 }
 
 func (c *Client) Disconnect() {
@@ -146,23 +175,23 @@ func (c *Client) loop() {
 		switch e := event.(type) {
 		// Steam events
 		case *steam.ConnectedEvent:
-			log.Printf("Connected to Steam")
+			log.Printf("Client %d Connected to Steam", c.Id)
 			c.onSteamConnected()
 		case *steam.MachineAuthUpdateEvent:
-			log.Printf("Received new sentry: %s", base64.StdEncoding.EncodeToString(e.Hash))
+			log.Printf("Client %d Received new sentry: %s", c.Id, base64.StdEncoding.EncodeToString(e.Hash))
 		case *steam.LoggedOnEvent:
-			log.Printf("Logged on to Steam")
+			log.Printf("Client %d Logged on to Steam", c.Id)
 			c.onSteamLogon()
 		case *steam.LogOnFailedEvent:
-			log.Printf("Log on failed, result: %s", e.Result)
+			log.Printf("Client %d Log on failed, result: %s", c.Id, e.Result)
 		case *steam.LoggedOffEvent:
-			log.Printf("Logged off, result: %s", e.Result)
+			log.Printf("Client %d Logged off, result: %s", c.Id, e.Result)
 		case *steam.DisconnectedEvent:
-			log.Printf("Disconnected from Steam.")
+			log.Printf("Client %d Disconnected from Steam.", c.Id)
 		case *steam.AccountInfoEvent:
-			log.Printf("Account name: %s, Country: %s, Authorized machines: %d", e.PersonaName, e.Country, e.CountAuthedComputers)
+			log.Printf("Client %d Account name: %s, Country: %s, Authorized machines: %d", c.Id, e.PersonaName, e.Country, e.CountAuthedComputers)
 		case *steam.LoginKeyEvent:
-			log.Printf("Login Key: %s", e.LoginKey)
+			log.Printf("Client %d Login Key: %s", c.Id, e.LoginKey)
 		case *steam.WebSessionIdEvent, *steam.PersonaStateEvent, *steam.FriendsListEvent, *steam.ClientCMListEvent:
 			// mute
 
@@ -171,7 +200,7 @@ func (c *Client) loop() {
 			c.readyLock.Lock()
 			c.readyChan <- struct{}{}
 			c.readyLock.Unlock()
-			log.Printf("Dota 2 Game Coordinator ready!")
+			log.Printf("Client %d Dota 2 Game Coordinator ready!", c.Id)
 
 			// errors
 		case steam.FatalErrorEvent, error:
@@ -184,28 +213,16 @@ func (c *Client) loop() {
 }
 
 func (c *Client) onSteamConnected() {
-	log.Printf("Logging on as %s", c.creds.Username)
-	c.sc.Auth.LogOn(c.creds)
+	log.Printf("Client %d Logging on as %s", c.Id, c.Creds.Username)
+	c.sc.Auth.LogOn(c.Creds)
 }
 
 func (c *Client) onSteamLogon() {
-	log.Printf("Setting social status to Offline")
+	log.Printf("Client %d Setting social status to Offline", c.Id)
 	// Set steam social status to 'offline')
 	c.sc.Social.SetPersonaState(steamlang.EPersonaState_Offline)
 
 	// Launch Dota 2
 	c.setPlaying(true)
 	c.sendHello()
-}
-
-func (c *Client) onDotaGCReady() {
-	log.Print("Dota 2 GC ready!")
-	matchDeets, err := c.MatchDetails(854233753)
-	if err != nil {
-		log.Printf("error getting match details: %v", err)
-		return
-	}
-
-	log.Printf("Got match details for match id %d", matchDeets.GetMatch().GetMatchId())
-	log.Printf("%v", matchDeets)
 }

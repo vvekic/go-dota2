@@ -5,48 +5,37 @@ import (
 	"log"
 	"time"
 
-	"github.com/cenk/backoff"
 	"github.com/vvekic/go-steam/dota/protocol/protobuf"
 	"github.com/vvekic/go-steam/protocol"
 	"github.com/vvekic/go-steam/protocol/gamecoordinator"
 )
 
 var (
-	helloTicker *time.Ticker
-	jobTimeout  time.Duration = time.Second * 30
-	jobRetries                = 10
+	jobTimeout = time.Second * 30
+	jobRetries = 10
 )
 
 type timeoutError struct {
 	err error
 }
 
+func (t timeoutError) IsTimeout() {}
+
 func (t timeoutError) Error() string {
 	return t.err.Error()
 }
 
-func (c *Client) runJob(msg *gamecoordinator.GCMsgProtobuf) (*gamecoordinator.GCPacket, error) {
-
-	var packet *gamecoordinator.GCPacket
-
-	operation := func() error {
-		p, err := c.runJobOne(msg)
-		if err != nil {
-			log.Printf("error: %v, backing off", err)
-			return err
-		}
-		packet = p
-		return nil
-	}
-
-	if err := backoff.Retry(operation, backoff.NewExponentialBackOff()); err != nil {
-		return nil, fmt.Errorf("error: %v, stopping back-off", err)
-	}
-
-	return packet, nil
+type disconnectedError struct {
+	error
 }
 
-func (c *Client) runJobOne(msg *gamecoordinator.GCMsgProtobuf) (*gamecoordinator.GCPacket, error) {
+func (t disconnectedError) IsDisconnected() {}
+
+func (c *Client) runJob(msg *gamecoordinator.GCMsgProtobuf) (*gamecoordinator.GCPacket, error) {
+	if !c.connected {
+		return nil, disconnectedError{fmt.Errorf("client %d is disconnected", c.Id)}
+	}
+
 	// Create a channel for this job
 	jobChan := make(chan *gamecoordinator.GCPacket)
 
@@ -60,6 +49,7 @@ func (c *Client) runJobOne(msg *gamecoordinator.GCMsgProtobuf) (*gamecoordinator
 
 	msg.SetSourceJobId(jobId)
 
+	log.Printf("client %d job %d", c.Id, jobId)
 	// Write this request to the GC
 	c.sc.GC.Write(msg)
 
@@ -82,7 +72,7 @@ type GCReadyEvent struct{}
 
 // Handle the GC's "Welcome" message; stops the "Hello" ticker and emits GCReadyEvent.
 func (c *Client) handleWelcome(packet *gamecoordinator.GCPacket) {
-	helloTicker.Stop()
+	c.helloTicker.Stop()
 	c.gcReady = true
 	c.sc.Emit(new(GCReadyEvent))
 }
@@ -97,7 +87,7 @@ func (c *Client) handleConnectionStatus(packet *gamecoordinator.GCPacket) {
 func (c *Client) handleCacheSubscribed(packet *gamecoordinator.GCPacket) {
 	response := new(protobuf.CMsgSOCacheSubscribed)
 	packet.ReadProtoMsg(response) // Interpret GCPacket and populate `response` with data
-	log.Printf("Received CacheSubscribed version %v", response.GetVersion())
+	log.Printf("Client %d Received CacheSubscribed version %v", c.Id, response.GetVersion())
 }
 
 func (c *Client) handleGetEventPointsResponse(packet *gamecoordinator.GCPacket) {
