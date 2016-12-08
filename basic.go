@@ -49,7 +49,7 @@ func (c *Client) runJob(msg *gamecoordinator.GCMsgProtobuf) (*gamecoordinator.GC
 
 	msg.SetSourceJobId(jobId)
 
-	log.Printf("client %d job %d", c.Id, jobId)
+	// log.Printf("client %d job %d", c.Id, jobId)
 	// Write this request to the GC
 	c.sc.GC.Write(msg)
 

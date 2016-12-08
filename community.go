@@ -14,7 +14,7 @@ func (c *Client) ProfileCard(accountID uint32) (*protobuf.CMsgDOTAProfileCard, e
 		// return nil, fmt.Errorf("GC not readyss")
 	}
 
-	log.Printf("Requesting profile card for account ID: %d", accountID)
+	// log.Printf("Requesting profile card for account ID: %d", accountID)
 	requestName := true
 	msg := gamecoordinator.NewGCMsgProtobuf(AppId, uint32(protobuf.EDOTAGCMsg_k_EMsgClientToGCGetProfileCard), &protobuf.CMsgDOTAProfileRequest{
 		AccountId:   &accountID,
