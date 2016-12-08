@@ -20,7 +20,7 @@ const AppId = 570
 var readyTimeout time.Duration = time.Second * 30
 
 func init() {
-	if err := steam.InitializeSteamDirectory(); err != nil {
+	if err := steam.InitializeSteamDirectory(91); err != nil {
 		log.Printf("error initializing Steam Directory, using built-in server list")
 	}
 }
@@ -121,17 +121,13 @@ func (c *Client) sendHello() {
 }
 
 func (c *Client) ConnectWithCreds(creds *steam.LogOnDetails) error {
+	c.sc.Connect()
 	if err := c.sc.ConnectTo(steam.GetRandomEuropeCM()); err != nil {
 		return errors.Wrap(err, "error connecting to Steam server")
 	}
 
 	select {
 	case <-c.readyChan:
-		c.connected = true
-		go func() {
-			<-c.sc.Disconnected
-			c.connected = false
-		}()
 		return nil
 	case <-time.After(readyTimeout):
 		return fmt.Errorf("timeout waiting for GC to become ready")
@@ -166,6 +162,12 @@ func (c *Client) Connect(username, password, sentry, authCode string) error {
 	return c.ConnectWithCreds(c.Creds)
 }
 
+func (c *Client) reconnect() {
+	if err := c.ConnectWithCreds(c.Creds); err != nil {
+		c.sc.Emit(&steam.DisconnectedEvent{})
+	}
+}
+
 func (c *Client) Disconnect() {
 	c.sc.Disconnect()
 }
@@ -188,23 +190,28 @@ func (c *Client) loop() {
 			log.Printf("Client %d Logged off, result: %s", c.Id, e.Result)
 		case *steam.DisconnectedEvent:
 			log.Printf("Client %d Disconnected from Steam.", c.Id)
+			c.gcReady = false
+			c.reconnect()
 		case *steam.AccountInfoEvent:
-			log.Printf("Client %d Account name: %s, Country: %s, Authorized machines: %d", c.Id, e.PersonaName, e.Country, e.CountAuthedComputers)
+			log.Printf("Client %d Account name: %s, Country: %s, Authorized machines: %d, Flags: %s", c.Id, e.PersonaName, e.Country, e.CountAuthedComputers, e.AccountFlags)
 		case *steam.LoginKeyEvent:
 			log.Printf("Client %d Login Key: %s", c.Id, e.LoginKey)
-		case *steam.WebSessionIdEvent, *steam.PersonaStateEvent, *steam.FriendsListEvent, *steam.ClientCMListEvent:
+		case *steam.WebSessionIdEvent, *steam.PersonaStateEvent, *steam.FriendsListEvent:
 			// mute
+		case *steam.ClientCMListEvent:
+			log.Printf("Client %d received CM list (%d servers)", c.Id, len(e.Addresses))
+			if e.Addresses != nil && len(e.Addresses) > 0 {
+				steam.UpdateSteamDirectory(e.Addresses)
+			}
 
 			// custom events
 		case *GCReadyEvent:
-			c.readyLock.Lock()
 			c.readyChan <- struct{}{}
-			c.readyLock.Unlock()
 			log.Printf("Client %d Dota 2 Game Coordinator ready!", c.Id)
 
 			// errors
 		case steam.FatalErrorEvent, error:
-			log.Fatal(e)
+			log.Printf("Client %d error: %v", c.Id, e)
 
 		default:
 			log.Printf("unknown steam event: %#v", e)

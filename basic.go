@@ -11,7 +11,7 @@ import (
 )
 
 var (
-	jobTimeout = time.Second * 30
+	jobTimeout = time.Second * 10
 	jobRetries = 10
 )
 
@@ -25,17 +25,7 @@ func (t timeoutError) Error() string {
 	return t.err.Error()
 }
 
-type disconnectedError struct {
-	error
-}
-
-func (t disconnectedError) IsDisconnected() {}
-
 func (c *Client) runJob(msg *gamecoordinator.GCMsgProtobuf) (*gamecoordinator.GCPacket, error) {
-	if !c.connected {
-		return nil, disconnectedError{fmt.Errorf("client %d is disconnected", c.Id)}
-	}
-
 	// Create a channel for this job
 	jobChan := make(chan *gamecoordinator.GCPacket)
 
@@ -69,6 +59,8 @@ func (c *Client) runJob(msg *gamecoordinator.GCMsgProtobuf) (*gamecoordinator.GC
 }
 
 type GCReadyEvent struct{}
+
+type DisconnectedEvent struct{}
 
 // Handle the GC's "Welcome" message; stops the "Hello" ticker and emits GCReadyEvent.
 func (c *Client) handleWelcome(packet *gamecoordinator.GCPacket) {
