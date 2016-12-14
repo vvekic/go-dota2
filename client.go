@@ -121,8 +121,7 @@ func (c *Client) sendHello() {
 }
 
 func (c *Client) ConnectWithCreds(creds *steam.LogOnDetails) error {
-	c.sc.Connect()
-	if err := c.sc.ConnectTo(steam.GetRandomEuropeCM()); err != nil {
+	if err := c.sc.Connect(); err != nil {
 		return errors.Wrap(err, "error connecting to Steam server")
 	}
 

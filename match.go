@@ -8,6 +8,31 @@ import (
 	"github.com/vvekic/go-steam/protocol/gamecoordinator"
 )
 
+func (c *Client) MatchDetailsPar(ids []int) []*protobuf.CMsgGCMatchDetailsResponse {
+	log.Printf("matchdetails %v", ids)
+	var responses []*protobuf.CMsgGCMatchDetailsResponse
+	out := make(chan *protobuf.CMsgGCMatchDetailsResponse)
+	defer close(out)
+	for _, id := range ids {
+		go func(id int) {
+			res, err := c.MatchDetails(uint64(id))
+			if err != nil {
+				log.Printf("client %d MatchDetails error: %v", c.Id, err)
+				out <- nil
+				return
+			}
+			out <- res
+		}(id)
+	}
+	for i := 0; i < len(ids); i++ {
+		r := <-out
+		if r != nil {
+			responses = append(responses, r)
+		}
+	}
+	return responses
+}
+
 // Sends a request to the Dota 2 GC requesting details for the given matchid.
 func (c *Client) MatchDetails(matchID uint64) (*protobuf.CMsgGCMatchDetailsResponse, error) {
 	if !c.gcReady {
