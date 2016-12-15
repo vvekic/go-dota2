@@ -34,6 +34,29 @@ func (c *Client) MatchDetailsPar(ids []int) []*protobuf.CMsgGCMatchDetailsRespon
 }
 
 // Sends a request to the Dota 2 GC requesting details for the given matchid.
+func (c *Client) ServerMatchDetails(matchIDs []uint64) (*protobuf.CMsgGCToServerMatchDetailsResponse, error) {
+	if !c.gcReady {
+		return nil, fmt.Errorf("GC not ready")
+	}
+
+	log.Printf("Requesting match details for match IDs: %v", matchIDs)
+	msgToGC := gamecoordinator.NewGCMsgProtobuf(
+		AppId,
+		uint32(protobuf.EDOTAGCMsg_k_EMsgServerToGCMatchDetailsRequest),
+		&protobuf.CMsgServerToGCMatchDetailsRequest{
+			MatchIds: matchIDs,
+		})
+
+	response := new(protobuf.CMsgGCToServerMatchDetailsResponse)
+	packet, err := c.runJob(msgToGC)
+	if err != nil {
+		return nil, err
+	}
+	packet.ReadProtoMsg(response) // Interpret GCPacket and populate `response` with data
+	return response, nil
+}
+
+// Sends a request to the Dota 2 GC requesting details for the given matchid.
 func (c *Client) MatchDetails(matchID uint64) (*protobuf.CMsgGCMatchDetailsResponse, error) {
 	if !c.gcReady {
 		return nil, fmt.Errorf("GC not ready")
