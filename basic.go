@@ -32,12 +32,12 @@ func (c *Client) runJob(msg *gamecoordinator.GCMsgProtobuf) (*gamecoordinator.GC
 	// Create job ID for this request
 	c.jobsLock.Lock()
 	// Create job ID for this request
-	jobId := protocol.JobId(c.lastJobID + 1)
-	c.lastJobID = jobId
-	c.jobs[jobId] = jobChan
+	jobID := protocol.JobId(c.lastJobID + 1)
+	c.lastJobID = jobID
+	c.jobs[jobID] = jobChan
 	c.jobsLock.Unlock()
 
-	msg.SetSourceJobId(jobId)
+	msg.SetSourceJobId(jobID)
 
 	// log.Printf("client %d job %d", c.Id, jobId)
 	// Write this request to the GC
@@ -46,15 +46,15 @@ func (c *Client) runJob(msg *gamecoordinator.GCMsgProtobuf) (*gamecoordinator.GC
 	select {
 	case packet := <-jobChan: // GCPacket response from GC
 		c.jobsLock.Lock()
-		delete(c.jobs, jobId)
+		delete(c.jobs, jobID)
 		c.jobsLock.Unlock()
 		return packet, nil
 	case <-time.After(jobTimeout):
 		c.jobsLock.Lock()
-		delete(c.jobs, jobId)
+		delete(c.jobs, jobID)
 		close(jobChan)
 		c.jobsLock.Unlock()
-		return nil, timeoutError{fmt.Errorf("job %d timeout", jobId)}
+		return nil, timeoutError{fmt.Errorf("job %d timeout", jobID)}
 	}
 }
 
