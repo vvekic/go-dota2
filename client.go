@@ -76,7 +76,7 @@ func (c *Client) HandleGCPacket(packet *gamecoordinator.GCPacket) {
 		// All key types are derived from int32, so cast to int32 to allow us to use a single switch for all types.
 		switch int32(packet.MsgType) {
 		case int32(protobuf.EGCBaseClientMsg_k_EMsgGCClientWelcome):
-			log.Printf("Client %d Received ClientWelcome", c.Id)
+			// log.Printf("Client %d Received ClientWelcome", c.Id)
 			c.handleWelcome(packet)
 		case int32(protobuf.EGCBaseClientMsg_k_EMsgGCClientConnectionStatus):
 			c.handleConnectionStatus(packet)
@@ -85,7 +85,7 @@ func (c *Client) HandleGCPacket(packet *gamecoordinator.GCPacket) {
 		case int32(protobuf.ESOMsg_k_ESOMsg_CacheSubscribed):
 			c.handleCacheSubscribed(packet)
 		default:
-			log.Printf("Recieved GC message without a handler, type %d", packet.MsgType)
+			log.Printf("client %s recieved GC message without a handler, type %d", c.Creds.Username, packet.MsgType)
 		}
 	}
 }
@@ -93,10 +93,10 @@ func (c *Client) HandleGCPacket(packet *gamecoordinator.GCPacket) {
 // SetPlaying tells Steam we're playing Dota 2
 func (c *Client) setPlaying(playing bool) {
 	if playing {
-		log.Printf("Setting GamesPlayed to Dota 2")
+		// log.Printf("Setting GamesPlayed to Dota 2")
 		c.sc.GC.SetGamesPlayed(AppId)
 	} else {
-		log.Print("Setting GamesPlayed to nil")
+		// log.Print("Setting GamesPlayed to nil")
 		c.sc.GC.SetGamesPlayed()
 	}
 }
@@ -108,7 +108,7 @@ func (c *Client) sendHello() {
 	c.helloTicker = time.NewTicker(5 * time.Second)
 	go func() {
 		for range c.helloTicker.C {
-			log.Printf("Client %d Sending ClientHello", c.Id)
+			// log.Printf("Client %d Sending ClientHello", c.Id)
 			c.sc.GC.Write(gamecoordinator.NewGCMsgProtobuf(
 				AppId,
 				uint32(protobuf.EGCBaseClientMsg_k_EMsgGCClientHello),
@@ -136,7 +136,7 @@ func (c *Client) ConnectWithCreds(creds *steam.LogOnDetails) error {
 }
 
 func (c *Client) Connect(username, password, sentry, authCode string) error {
-	log.Printf("client %d connecting(%s, %s, %s, %s)", c.Id, username, password, sentry, authCode)
+	// log.Printf("client %d connecting(%s, %s, %s, %s)", c.Id, username, password, sentry, authCode)
 	// Check for credentials
 	c.Creds = &steam.LogOnDetails{
 		Username: username,
@@ -162,6 +162,7 @@ func (c *Client) Connect(username, password, sentry, authCode string) error {
 }
 
 func (c *Client) reconnect() {
+	log.Printf("reconnecting Steam account %s", c.Creds.Username)
 	if err := c.ConnectWithCreds(c.Creds); err != nil {
 		c.sc.Emit(&steam.DisconnectedEvent{})
 	}
@@ -171,34 +172,42 @@ func (c *Client) Disconnect() {
 	c.sc.Disconnect()
 }
 
+func (c *Client) Close() {
+	c.sc.DisconnectNoEvent()
+}
+
 func (c *Client) loop() {
 	for event := range c.sc.Events() {
 		switch e := event.(type) {
 		// Steam events
 		case *steam.ConnectedEvent:
-			log.Printf("Client %d Connected to Steam", c.Id)
+			// log.Printf("Client %d Connected to Steam", c.Id)
 			c.onSteamConnected()
 		case *steam.MachineAuthUpdateEvent:
-			log.Printf("Client %d Received new sentry: %s", c.Id, base64.StdEncoding.EncodeToString(e.Hash))
+			log.Printf("Client %s Received new sentry: %s", c.Creds.Username, base64.StdEncoding.EncodeToString(e.Hash))
 		case *steam.LoggedOnEvent:
-			log.Printf("Client %d Logged on to Steam", c.Id)
+			// log.Printf("Client %d Logged on to Steam", c.Id)
 			c.onSteamLogon()
 		case *steam.LogOnFailedEvent:
-			log.Printf("Client %d Log on failed, result: %s", c.Id, e.Result)
+			log.Printf("Client %s Log on failed, result: %s", c.Creds.Username, e.Result)
+			c.sc.DisconnectNoEvent()
 		case *steam.LoggedOffEvent:
-			log.Printf("Client %d Logged off, result: %s", c.Id, e.Result)
+			log.Printf("Client %s Logged off, result: %s", c.Creds.Username, e.Result)
+			if e.Result == steamlang.EResult_LogonSessionReplaced {
+				c.Disconnect()
+			}
 		case *steam.DisconnectedEvent:
-			log.Printf("Client %d Disconnected from Steam.", c.Id)
+			log.Printf("Client %s Disconnected from Steam.", c.Creds.Username)
 			c.gcReady = false
 			c.reconnect()
 		case *steam.AccountInfoEvent:
-			log.Printf("Client %d Account name: %s, Country: %s, Authorized machines: %d, Flags: %s", c.Id, e.PersonaName, e.Country, e.CountAuthedComputers, e.AccountFlags)
+			// log.Printf("Client %d Account name: %s, Country: %s, Authorized machines: %d, Flags: %s", c.Id, e.PersonaName, e.Country, e.CountAuthedComputers, e.AccountFlags)
 		case *steam.LoginKeyEvent:
-			log.Printf("Client %d Login Key: %s", c.Id, e.LoginKey)
+			// log.Printf("Client %d Login Key: %s", c.Id, e.LoginKey)
 		case *steam.WebSessionIdEvent, *steam.PersonaStateEvent, *steam.FriendsListEvent:
 			// mute
 		case *steam.ClientCMListEvent:
-			log.Printf("Client %d received CM list (%d servers)", c.Id, len(e.Addresses))
+			// log.Printf("Client %d received CM list (%d servers)", c.Id, len(e.Addresses))
 			if e.Addresses != nil && len(e.Addresses) > 0 {
 				steam.UpdateSteamDirectory(e.Addresses)
 			}
@@ -206,25 +215,25 @@ func (c *Client) loop() {
 			// custom events
 		case *GCReadyEvent:
 			c.readyChan <- struct{}{}
-			log.Printf("Client %d Dota 2 Game Coordinator ready!", c.Id)
+			// log.Printf("Client %d Dota 2 Game Coordinator ready!", c.Id)
 
 			// errors
 		case steam.FatalErrorEvent, error:
-			log.Printf("Client %d error: %v", c.Id, e)
+			log.Printf("Client %s error: %v", c.Creds.Username, e)
 
 		default:
-			log.Printf("unknown steam event: %#v", e)
+			log.Printf("Client %s unknown steam event: %#v", c.Creds.Username, e)
 		}
 	}
 }
 
 func (c *Client) onSteamConnected() {
-	log.Printf("Client %d Logging on as %s", c.Id, c.Creds.Username)
+	// log.Printf("Client %d Logging on as %s", c.Id, c.Creds.Username)
 	c.sc.Auth.LogOn(c.Creds)
 }
 
 func (c *Client) onSteamLogon() {
-	log.Printf("Client %d Setting social status to Offline", c.Id)
+	// log.Printf("Client %d Setting social status to Offline", c.Id)
 	// Set steam social status to 'offline')
 	c.sc.Social.SetPersonaState(steamlang.EPersonaState_Offline)
 

@@ -9,7 +9,6 @@ import (
 )
 
 func (c *Client) MatchDetailsPar(ids []int) []*protobuf.CMsgGCMatchDetailsResponse {
-	log.Printf("matchdetails %v", ids)
 	var responses []*protobuf.CMsgGCMatchDetailsResponse
 	out := make(chan *protobuf.CMsgGCMatchDetailsResponse)
 	defer close(out)
@@ -17,7 +16,7 @@ func (c *Client) MatchDetailsPar(ids []int) []*protobuf.CMsgGCMatchDetailsRespon
 		go func(id int) {
 			res, err := c.MatchDetails(uint64(id))
 			if err != nil {
-				log.Printf("client %d MatchDetails error: %v", c.Id, err)
+				log.Printf("client %s MatchDetails error: %v", c.Creds.Username, err)
 				out <- nil
 				return
 			}
@@ -62,7 +61,7 @@ func (c *Client) MatchDetails(matchID uint64) (*protobuf.CMsgGCMatchDetailsRespo
 		return nil, fmt.Errorf("GC not ready")
 	}
 
-	log.Printf("Requesting match details for match ID: %d", matchID)
+	// log.Printf("Requesting match details for match ID: %d", matchID)
 
 	msgToGC := gamecoordinator.NewGCMsgProtobuf(
 		AppId,
@@ -80,15 +79,17 @@ func (c *Client) MatchDetails(matchID uint64) (*protobuf.CMsgGCMatchDetailsRespo
 	return response, nil
 }
 
-func (c *Client) Matches(startMatchID int, matchesRequested uint32) (*protobuf.CMsgDOTARequestMatchesResponse, error) {
+func (c *Client) Matches(startMatchID, matchesRequested int) (*protobuf.CMsgDOTARequestMatchesResponse, error) {
 	if !c.gcReady {
 		return nil, fmt.Errorf("GC not ready")
 	}
 
 	log.Printf("Requesting matches starting at match ID: %d", startMatchID)
-
+	minPlayers := uint32(10)
+	matchesRequestedUint32 := uint32(matchesRequested)
 	req := &protobuf.CMsgDOTARequestMatches{
-		MatchesRequested: &matchesRequested,
+		MinPlayers:       &minPlayers,
+		MatchesRequested: &matchesRequestedUint32,
 	}
 	if startMatchID >= 0 {
 		var id uint64
@@ -111,7 +112,7 @@ func (c *Client) Matches(startMatchID int, matchesRequested uint32) (*protobuf.C
 	return response, nil
 }
 
-func (c *Client) MatchMinimalDetails(matchIDs ...uint64) (*protobuf.CMsgClientToGCMatchesMinimalResponse, error) {
+func (c *Client) MatchesMinimal(matchIDs ...uint64) (*protobuf.CMsgClientToGCMatchesMinimalResponse, error) {
 	if !c.gcReady {
 		return nil, fmt.Errorf("GC not ready")
 	}

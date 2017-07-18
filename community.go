@@ -1,7 +1,7 @@
 package dota2
 
 import (
-	"log"
+	"fmt"
 
 	"github.com/vvekic/go-steam/dota/protocol/protobuf"
 	"github.com/vvekic/go-steam/protocol/gamecoordinator"
@@ -10,8 +10,7 @@ import (
 // ProfileCard sends a request to the Dota 2 GC requesting profile card for account with given ID
 func (c *Client) ProfileCard(accountID uint32) (*protobuf.CMsgDOTAProfileCard, error) {
 	if !c.gcReady {
-		log.Printf("gc not ready!?")
-		// return nil, fmt.Errorf("GC not readyss")
+		return nil, fmt.Errorf("GC not readyss")
 	}
 
 	// log.Printf("Requesting profile card for account ID: %d", accountID)

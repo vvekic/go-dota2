@@ -2,7 +2,6 @@ package dota2
 
 import (
 	"fmt"
-	"log"
 	"time"
 
 	"github.com/vvekic/go-steam/dota/protocol/protobuf"
@@ -15,13 +14,13 @@ var (
 	jobRetries = 10
 )
 
-type timeoutError struct {
+type TimeoutError struct {
 	err error
 }
 
-func (t timeoutError) IsTimeout() {}
+func (t TimeoutError) IsTimeout() {}
 
-func (t timeoutError) Error() string {
+func (t TimeoutError) Error() string {
 	return t.err.Error()
 }
 
@@ -54,7 +53,7 @@ func (c *Client) runJob(msg *gamecoordinator.GCMsgProtobuf) (*gamecoordinator.GC
 		delete(c.jobs, jobID)
 		close(jobChan)
 		c.jobsLock.Unlock()
-		return nil, timeoutError{fmt.Errorf("job %d timeout", jobID)}
+		return nil, TimeoutError{fmt.Errorf("client %s job %d timeout", c.Creds.Username, jobID)}
 	}
 }
 
@@ -73,17 +72,17 @@ func (c *Client) handleConnectionStatus(packet *gamecoordinator.GCPacket) {
 	// Construct and wait for the GC's response (will be piped to our jobs channel)
 	response := new(protobuf.CMsgConnectionStatus)
 	packet.ReadProtoMsg(response) // Interpret GCPacket and populate `response` with data
-	log.Printf("Received ConnectionStatus %s", response.GetStatus())
+	// log.Printf("Received ConnectionStatus %s", response.GetStatus())
 }
 
 func (c *Client) handleCacheSubscribed(packet *gamecoordinator.GCPacket) {
 	response := new(protobuf.CMsgSOCacheSubscribed)
 	packet.ReadProtoMsg(response) // Interpret GCPacket and populate `response` with data
-	log.Printf("Client %d Received CacheSubscribed version %v", c.Id, response.GetVersion())
+	// log.Printf("Client %d Received CacheSubscribed version %v", c.Id, response.GetVersion())
 }
 
 func (c *Client) handleGetEventPointsResponse(packet *gamecoordinator.GCPacket) {
 	response := new(protobuf.CMsgDOTAGetEventPointsResponse)
 	packet.ReadProtoMsg(response)
-	log.Printf("Received GetEventPointsResponse %s", response.String())
+	// log.Printf("Received GetEventPointsResponse %s", response.String())
 }
